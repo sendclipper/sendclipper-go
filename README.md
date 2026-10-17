@@ -6,6 +6,8 @@ The official Go library for the [SendClipper](https://sendclipper.com) email API
 go get github.com/sendclipper/sendclipper-go
 ```
 
+At a `go.work` root that is not a module itself, `go get` refuses: run it inside the module that sends mail (the directory with its own `go.mod`).
+
 Go 1.23 or newer. No dependencies outside the standard library. API reference on [pkg.go.dev](https://pkg.go.dev/github.com/sendclipper/sendclipper-go).
 
 ## Setup
