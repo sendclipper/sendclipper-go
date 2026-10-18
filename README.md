@@ -45,6 +45,27 @@ fmt.Println("Email", email.ID, "accepted")
 
 `From` must be a bare address on a domain you verified in SendClipper. Each message has one recipient in `To`; for several, use `Batch.Send`.
 
+## Reply-To and attachments
+
+```go
+pdf, err := os.ReadFile("booking-42.pdf")
+if err != nil {
+	return err
+}
+client.Emails.Send(ctx, &sendclipper.SendEmailParams{
+	From:    "bookings@acme.io",
+	To:      "ada@lumen.io",
+	Subject: "Your booking",
+	HTML:    "<p>Your confirmation is attached.</p>",
+	ReplyTo: []string{"support@acme.io"},
+	Attachments: []sendclipper.Attachment{
+		{Filename: "booking-42.pdf", Content: pdf},
+	},
+})
+```
+
+`ReplyTo` is a list of 1 to 10 addresses. `Content` is the file's bytes; the SDK base64-encodes it for you. `ContentType` is guessed from the filename when you leave it out. Limits: 10 MiB per file, 25 MiB of files per message, and your sending provider's own. Attachments are not accepted on a batch item; send those emails on their own.
+
 ## Send with a template
 
 Design and publish a template in the dashboard, then send it by id or by its send name:

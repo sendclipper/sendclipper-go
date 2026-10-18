@@ -1,6 +1,8 @@
 package sendclipper
 
 import (
+	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"time"
 )
@@ -57,6 +59,39 @@ type SendEmailParams struct {
 	TrackOpens *bool `json:"trackOpens,omitempty"`
 	// TrackClicks false leaves links unwrapped. Default true.
 	TrackClicks *bool `json:"trackClicks,omitempty"`
+	// ReplyTo is the Reply-To header: 1 to 10 bare addresses. Accepted on a batch item too.
+	ReplyTo []string `json:"replyTo,omitempty"`
+	// Attachments are files sent with the message: 10 MiB per file, 25 MiB of
+	// files per message, 20 files. Not accepted on a batch item: the API fails
+	// that item with attachments_not_batchable.
+	Attachments []Attachment `json:"attachments,omitempty"`
+}
+
+// Attachment is one file sent with a message.
+type Attachment struct {
+	// Filename is the name the recipient sees, e.g. "booking-42.pdf".
+	Filename string `json:"filename"`
+	// Content is the file's raw bytes; it is base64-encoded for you.
+	Content []byte `json:"content"`
+	// ContentType is the MIME type, e.g. "application/pdf". Empty lets the API guess it from Filename.
+	ContentType string `json:"contentType,omitempty"`
+}
+
+// MarshalJSON writes Content as standard, padded base64 (RFC 4648 §4), which
+// is what the API decodes. encoding/json would pick the same encoding for a
+// []byte on its own; it is spelled out here so the wire format does not rest
+// on that default. HTML escaping is off, as it is for the request body, so a
+// filename like "Q&A.pdf" travels as written.
+func (a Attachment) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	err := enc.Encode(struct {
+		Filename    string `json:"filename"`
+		Content     string `json:"content"`
+		ContentType string `json:"contentType,omitempty"`
+	}{a.Filename, base64.StdEncoding.EncodeToString(a.Content), a.ContentType})
+	return bytes.TrimRight(buf.Bytes(), "\n"), err
 }
 
 // EmailStatus is a message's delivery state.

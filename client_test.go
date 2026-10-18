@@ -2,6 +2,7 @@ package sendclipper
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"os"
@@ -63,6 +64,47 @@ func TestATemplateSendCarriesTemplateIDVariablesAndACallerKey(t *testing.T) {
 	want := `{"from":"hello@acme.io","to":"ada@lumen.io","templateId":"tpl_9f2b7c10ad42","variables":{"first_name":"Ada"},"trackOpens":false}`
 	if string(f.Calls()[0].Body) != want {
 		t.Fatalf("body %s", f.Calls()[0].Body)
+	}
+}
+
+// replyToAndFile is a send carrying two Reply-To addresses and one file.
+var replyToAndFile = &SendEmailParams{From: "bookings@acme.io", To: "ada@lumen.io", Subject: "Your booking", HTML: "<p>Attached.</p>",
+	ReplyTo:     []string{"support@acme.io", "ops@acme.io"},
+	Attachments: []Attachment{{Filename: "Q&A booking-42.pdf", Content: []byte("%PDF-1.7\n\xff\xfe"), ContentType: "application/pdf"}}}
+
+const replyToAndFileBody = `{"from":"bookings@acme.io","to":"ada@lumen.io","subject":"Your booking","html":"<p>Attached.</p>",` +
+	`"replyTo":["support@acme.io","ops@acme.io"],` +
+	`"attachments":[{"filename":"Q&A booking-42.pdf","content":"JVBERi0xLjcK//4=","contentType":"application/pdf"}]}`
+
+func TestASendCarriesReplyToAndBase64EncodedAttachments(t *testing.T) {
+	c, f := newFake(t, reply{Status: 201, Body: sent})
+	if _, err := c.Emails.Send(ctx, replyToAndFile); err != nil {
+		t.Fatal(err)
+	}
+	if got := string(f.Calls()[0].Body); got != replyToAndFileBody {
+		t.Fatalf("body %s\nwant %s", got, replyToAndFileBody)
+	}
+}
+
+func TestTheSandboxSendCarriesReplyToAndAttachmentsToo(t *testing.T) {
+	c, f := newFake(t, reply{Status: 201, Body: map[string]any{"id": "sbx-msg"}})
+	if _, err := c.Sandboxes.Send(ctx, "sc_sbx_abc", replyToAndFile); err != nil {
+		t.Fatal(err)
+	}
+	if call := f.Calls()[0]; call.Path != "/v1/sandbox/emails" || string(call.Body) != replyToAndFileBody {
+		t.Fatalf("%s %s", call.Path, call.Body)
+	}
+}
+
+func TestAnAttachmentWithNoContentTypeLeavesItOutAndABatchItemCarriesReplyTo(t *testing.T) {
+	b, err := json.Marshal(Attachment{Filename: "a.txt", Content: []byte("hi?")})
+	if err != nil || string(b) != `{"filename":"a.txt","content":"aGk/"}` {
+		t.Fatalf("%s %v", b, err)
+	}
+	c, f := newFake(t, ok(map[string]any{"data": []any{}, "summary": map[string]any{}}))
+	_, _ = c.Batch.Send(ctx, []SendEmailParams{{From: "a@acme.io", To: "b@lumen.io", Subject: "s", HTML: "h", ReplyTo: []string{"support@acme.io"}}})
+	if want := `{"emails":[{"from":"a@acme.io","to":"b@lumen.io","subject":"s","html":"h","replyTo":["support@acme.io"]}]}`; string(f.Calls()[0].Body) != want {
+		t.Fatalf("%s", f.Calls()[0].Body)
 	}
 }
 
